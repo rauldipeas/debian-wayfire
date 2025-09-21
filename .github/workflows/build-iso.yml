@@ -1,0 +1,53 @@
+name: Build Debian Wayfire ISO
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-iso:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          wget -q --show-progress http://deb.debian.org/debian/pool/main/l/live-build/$(curl -sSL https://ftp.debian.org/debian/pool/main/l/live-build/ | grep -o 'live-build_[^"]*all.deb' | sort -V | tail -n1)
+          wget -q --show-progress http://deb.debian.org/debian/pool/main/d/debian-archive-keyring/$(curl -sSL https://ftp.debian.org/debian/pool/main/d/debian-archive-keyring/ | grep -o 'debian-archive-keyring_[^"]*all.deb' | sort -V | tail -n1)
+          sudo apt install -y ./debian-archive-keyring_*all.deb ./live-build_*all.deb
+
+      - name: Configure live-build
+        run: |
+          lb config \
+            --apt-source-archives false \
+            --archive-areas "main contrib non-free non-free-firmware" \
+            --bootappend-live "boot=live components" \
+            --chroot-squashfs-compression-type xz\
+            --color\
+            --compression xz \
+            --debconf-frontend noninteractive \
+            --debian-installer live \
+            --debian-installer-gui true \
+            --distribution trixie \
+            --image-name "debian-wayfire"\
+            --mirror-bootstrap "https://deb.debian.org/debian/" \
+            --mirror-binary "https://deb.debian.org/debian/" \
+            --mirror-chroot "https://deb.debian.org/debian/" \
+            --quiet \
+            --swap-file-path '/swapfile' \
+            --system live \
+            --utc-time true
+
+          mkdir -p config/package-lists
+          echo "alacritty fonts-inter lightdm-gtk-greeter mako-notifier wayfire wayfire-plugin-winshadows wcm wf-shell xinit xserver-xorg xwayland" > config/package-lists/wayfire.list.chroot
+
+      - name: Build ISO
+        run: sudo lb build
+
+      - name: Upload ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-wayfire
+          path: debian-wayfire*.iso
